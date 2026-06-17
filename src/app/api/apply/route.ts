@@ -6,6 +6,33 @@ import { appendToSpreadsheet } from "@/lib/spreadsheet";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function isServerlessRuntime() {
+  return Boolean(
+    process.env.NETLIFY ||
+      process.env.VERCEL ||
+      process.env.AWS_LAMBDA_FUNCTION_NAME,
+  );
+}
+
+async function saveSubmissionBackup(
+  formType: ApplyTab,
+  submission: Record<string, unknown>,
+) {
+  const filename = `${formType}-${Date.now()}.json`;
+  const payload = JSON.stringify(submission, null, 2);
+
+  if (isServerlessRuntime()) {
+    const dataDir = path.join("/tmp", "cbai-submissions");
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(path.join(dataDir, filename), payload);
+    return;
+  }
+
+  const dataDir = path.join(process.cwd(), "data");
+  await mkdir(dataDir, { recursive: true });
+  await writeFile(path.join(dataDir, filename), payload);
+}
+
 function requireFields(body: Record<string, unknown>, fields: string[]) {
   for (const field of fields) {
     const v = body[field];
@@ -67,11 +94,14 @@ export async function POST(request: NextRequest) {
       submittedAt: new Date().toISOString(),
     };
 
-    const dataDir = path.join(process.cwd(), "data");
-    await mkdir(dataDir, { recursive: true });
-
-    const filename = `${formType}-${Date.now()}.json`;
-    await writeFile(path.join(dataDir, filename), JSON.stringify(submission, null, 2));
+    try {
+      await saveSubmissionBackup(formType, submission);
+    } catch (backupError) {
+      console.warn(
+        "[apply] Local backup skipped:",
+        backupError instanceof Error ? backupError.message : backupError,
+      );
+    }
 
     let sheetWarning: string | undefined;
     try {
@@ -87,7 +117,8 @@ export async function POST(request: NextRequest) {
       message: "Submission received successfully",
       ...(sheetWarning ? { warning: sheetWarning } : {}),
     });
-  } catch {
+  } catch (error) {
+    console.error("[apply] Submission failed:", error);
     return NextResponse.json({ error: "Failed to process submission" }, { status: 500 });
   }
 }
