@@ -36,7 +36,12 @@ GOOGLE_SHEETS_WEBHOOK_SECRET=your-secret   # optional
 
 6. Restart the dev server.
 
-## Tech Stack
+## Deploy (Netlify)
+
+This is a Next.js app. Netlify uses `@netlify/plugin-nextjs` — **do not** set a publish directory (`dist`) in the Netlify UI.
+
+Set `GOOGLE_SHEETS_WEBHOOK_URL` in Netlify environment variables for production form sync.
+
 
 - Next.js 15 (App Router)
 - React 19
